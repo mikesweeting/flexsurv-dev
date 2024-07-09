@@ -223,8 +223,6 @@ test_that("Model fit with covariates and simulated data",{
 })
 
 test_that("Covariates on ancillary parameters",{
-  
-  expect_error({
     set.seed(11082012)
     x3 <- rnorm(1500,0,1)
     x4 <- rnorm(1500,0,1)
@@ -232,7 +230,8 @@ test_that("Covariates on ancillary parameters",{
     sim <- rgengamma(1500, 1, exp(0.5 + 0.1*x3 + -0.3*x4), -0.4 + 1.2*x5)
     dead <- as.numeric(sim<=30)
     simt <- ifelse(sim<=30, sim, 30)
-
+    
+  expect_error({
     ## Cov on ancillary, not on location
     flexsurvreg(Surv(simt, dead) ~ sigma(x3), dist="gengamma", fixedpars=TRUE)
     flexsurvreg(Surv(simt, dead) ~ 1, anc=list(sigma=~x3), dist="gengamma", fixedpars=TRUE)
@@ -249,6 +248,18 @@ test_that("Covariates on ancillary parameters",{
     flexsurvreg(Surv(simt, dead) ~ x3 + sigma(x3) + sigma(x4) + Q(x5), dist="gengamma", fixedpars=TRUE)
     x <- flexsurvreg(Surv(simt, dead) ~ x3, anc=list(sigma=~x3+x4, Q=~x5), dist="gengamma", fixedpars=TRUE)
   }, NA)
+    
+  ## Warning if location parameter supplied as ancillary
+  expect_warning(
+      expect_error(flexsurvreg(Surv(simt, dead) ~ mu(x3), dist="gengamma", fixedpars=TRUE),
+                   "could not find function"),
+      "Ignoring location parameter")
+  expect_warning(flexsurvreg(Surv(simt, dead) ~ scale(x3), dist="weibull", fixedpars=TRUE),
+                 "Ignoring location parameter") ## base::scale exists
+  expect_warning(flexsurvreg(Surv(simt, dead) ~ 1, anc=list(mu= ~x3), dist="gengamma", fixedpars=TRUE),
+                 "Ignoring location parameter")
+  expect_warning(flexsurvreg(Surv(simt, dead) ~ 1, anc=list(scale=~x3), dist="weibull", fixedpars=TRUE),
+                 "Ignoring location parameter")
 })
 
 test_that("formula can contain dot", {
@@ -486,6 +497,13 @@ test_that("warning with strata", {
     ## need double backslash to escape $
     expect_warning(flexsurvreg(formula = Surv(ovarian$futime, ovarian$fustat) ~ strata(ovarian$resid.ds), dist="gengamma", inits=c(6,1,-1,0)),
                    "Ignoring \"strata\" function: interpreting \"ovarian\\$resid.ds\" as a covariate on \"mu\"")
+})
+
+test_that("error with frailty() and offset()", { 
+    expect_error(flexsurvreg(formula = Surv(futime, fustat) ~ frailty(resid.ds), data="ovarian", dist="weibull"),
+                   "frailty models are not supported")
+    expect_error(flexsurvreg(formula = Surv(futime, fustat) ~ offset(resid.ds), data="ovarian", dist="weibull"),
+                   "offset\\(\\) terms are not supported")
 })
 
 test_that("Distribution names are case insensitive",{

@@ -1,4 +1,13 @@
-# Version 2.3 (2023-??-??)
+# Version 2.3.1 ? (development version)
+
+* Fix for simulating from semi-Markov models with `tcovs` option,
+  which was not completing for some model configurations.
+
+* Fix for `simulate.flexsurvreg()` with vector `start` argument
+  (#192).
+  
+
+# Version 2.3 (2024-04-21)
 
 * Analytic Hessian calculation for models where this is possible, that
   is, Weibull, Gompertz, exponential, and spline models in hazard and
@@ -6,9 +15,22 @@
 
 * Analytic gradient calculation for Weibull proportional hazards models.
 
+* Vignette now firmly warns against using flexsurv with time-dependent
+  covariates (#176).
+
+* New argument `spline="splines2ns"` can now be specified to use an
+  orthogonal spline basis in `flexsurvspline()`.
+
 * Weighted likelihood for relative survival models now implemented
   consistently with other models, as a weighted sum of individual
   log-likelihoods.
+
+* `standsurv` now returns results in the same order of times `t`
+  as given by the user, for consistency with `summary.flexsurvreg`.
+
+* Quantiles of standardised survival now available in `standsurv`.
+
+* Non-default factor contrasts now handled.
 
 * `pmatrix.simfs` can now accept a vector of times `t` and has a
   `tidy` output option.
@@ -22,7 +44,12 @@
 
 * `coxsnell.flexsurvreg` now handles delayed entry.
 
-* Quantiles of standardised survival now available in `standsurv`.
+* Warning given if the name of a location parameter is included in the
+  ancillary part of the model specification.
+
+* Fix for computing quantiles for custom distributions (#187).
+
+Thank you to all who have contributed code for this version: @mikesweeting @stephematician @ndunnewind @mattwarkentin @hfrick @kkmann; or reported issues: @anddis @irtimmins @sbihorel @zou-ims @aghaynes @huftis @mafed @hezht3 @sebffischer (and anyone else who reported issues via email).
 
 
 # Version 2.2.2 (2023-01-31)
@@ -34,7 +61,7 @@
 # Version 2.2.1 (2022-12-22)
 
 * New `simulate.flexsurvreg` method to simulate data from a fitted
-  flexsurvreg or flexsurvspline model.  Thanks to Mark Clements for
+  `flexsurvreg()` or `flexsurvspline()` model.  Thanks to Mark Clements for
   help with this.
 
 * Fix of bug for `summary()` method with type = `"quantile"` or `"median"`
@@ -51,7 +78,7 @@
   See the new vignette about it.
 
 * New function `hr_flexsurvreg` to compute the hazard ratio from a
-  fitted flexsurvreg or flexsurvspline model as a function of time,
+  fitted `flexsurvreg()` or `flexsurvspline()` model as a function of time,
   with confidence intervals.
 
 * `summary.flexsurvreg` has been rewritten to make it cleaner and

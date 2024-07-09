@@ -219,7 +219,7 @@ check.dlist <- function(dlist){
 
 check.formula <- function(formula, dlist, data = NULL){
     if (!inherits(formula,"formula")) stop("\"formula\" must be a formula object")
-    labs <- attr(terms(formula, data = data), "term.labels")
+    labs <- as.character(attr(terms(formula, data = data), "variables"))[-c(1,2)]
     if (!("strata" %in% dlist$pars)){
         strat <- grep("strata\\((.+)\\)",labs)
         if (length(strat) > 0){
@@ -230,7 +230,13 @@ check.formula <- function(formula, dlist, data = NULL){
     if (!("frailty" %in% dlist$pars)){
         fra <- grep("frailty\\((.+)\\)",labs)
         if (length(fra) > 0){
-            warning("frailty models are not supported and behaviour of frailty() is undefined")
+            stop("frailty models are not supported and behaviour of frailty() is undefined")
+        }
+    }
+    if (!("offset" %in% dlist$pars)){
+        fra <- grep("offset\\((.+)\\)",labs)
+        if (length(fra) > 0){
+            stop("offset() terms are not supported in formulae. To fit a model with a covariate coefficient fixed to 1, use the `inits` and `fixedpars` arguments")
         }
     }
 }
@@ -245,7 +251,7 @@ check.fixedpars <- function(fixedpars, npars) {
 
 anc_from_formula <- function(formula, anc, dlist,
                              msg = "\"anc\" must be a list of formulae",
-                             data = NULL) {
+                             data = NULL, loc_warn=TRUE) {
     parnames <- dlist$pars
     ancnames <- setdiff(parnames, dlist$location)
     if (is.null(anc)){
@@ -254,6 +260,7 @@ anc_from_formula <- function(formula, anc, dlist,
         for (i in ancnames){
             anc[[i]] <- ancpar.formula(formula, i, data)
         }
+        ancpar.formula(formula, dlist$location, data, location=TRUE)
     }
     else {
         if (!is.list(anc) || !all(sapply(anc, function(x)inherits(x, "formula"))))
@@ -263,15 +270,19 @@ anc_from_formula <- function(formula, anc, dlist,
                                                dlist$name, badnames[1]))
         ## reorder components of anc to canonical order
         anc <- anc[dlist$pars[dlist$pars %in% names(anc)]]
+        if (dlist$location %in% names(anc) && loc_warn)
+          warning(sprintf("Ignoring location parameter `%s` in ancillary formula", dlist$location))
     }
     anc
 }
 
-ancpar.formula <- function(formula, par, data = NULL){
+ancpar.formula <- function(formula, par, data = NULL, location=FALSE){
     labs <- attr(terms(formula, data = data), "term.labels")
     pattern <- paste0(par,"\\((.+)\\)")
     labs <- grep(pattern,labs,value=TRUE)
     if (length(labs)==0) return(NULL)
+    else if (location) 
+        warning(sprintf("Ignoring location parameter `%s` in ancillary formula", par))
     labs <- gsub(pattern, "\\1", labs)
     f2 <- reformulate(labs)
     environment(f2) <- environment(formula)
@@ -309,6 +320,7 @@ concat.formulae <- function(formula,forms, data = NULL){
 ## User-supplied initial value functions don't have to include all
 ## four possible arguments: this expands them if they don't
 
+#' @noRd
 expand.inits.args <- function(inits){
     inits2 <- inits
     formals(inits2) <- alist(t=,mf=,mml=,aux=)
@@ -319,6 +331,7 @@ expand.inits.args <- function(inits){
 ## User-supplied summary output functions don't have to include all
 ## two possible arguments: this expands them if they don't
 
+#' @noRd
 expand.summfn.args <- function(summfn){
     summfn2 <- summfn
     args <- c(alist(t=,start=), formals(summfn))
@@ -866,11 +879,11 @@ flexsurvreg <- function(formula, anc=NULL, data, weights, bhazard, rtrunc, subse
     temp[[1]] <- as.name("model.frame")
 
     f2 <- concat.formulae(formula,forms, data)
-    temp[["formula"]] <- f2
+    temp[["formula"]] <- terms(f2)
     if (missing(data)) temp[["data"]] <- environment(formula)
     m <- eval(temp, parent.frame())
 
-    m <- droplevels(m) # remove unused factor levels after subset applied
+    m <- droplevels_keepcontrasts(m) # remove unused factor levels after subset applied
     attr(m,"covnames") <- attr(f2, "covnames") # for "newdata" in summary
     attr(m,"covnames.orig") <- intersect(colnames(m), attr(f2, "covnames.orig")) # for finding factors in plot method
     Y <- check.flexsurv.response(model.extract(m, "response"))
@@ -881,6 +894,7 @@ flexsurvreg <- function(formula, anc=NULL, data, weights, bhazard, rtrunc, subse
         mx[[i]] <- length(unlist(mx)) + seq_len(ncol(mml[[i]][,-1,drop=FALSE]))
     }
     X <- compress.model.matrices(mml)
+    contr.save <- lapply(mml, function(x)attr(x,"contrasts"))
 
     weights <- model.extract(m, "weights")
     if (is.null(weights)) weights <- m$"(weights)" <- rep(1, nrow(X))
@@ -979,7 +993,7 @@ flexsurvreg <- function(formula, anc=NULL, data, weights, bhazard, rtrunc, subse
                                                 rtrunc=rtrunc, dlist=dlist, inits=inits, dfns=dfns,
                                                 aux=aux, mx=mx, fixedpars=fixedpars)
         
-        if (hessian && all(is.finite(opt$hessian)) && all(eigen(opt$hessian)$values > 0))
+        if (hessian && all(is.finite(opt$hessian)))
         {
             cov <- .hess_to_cov(opt$hessian, hess.control$tol.solve, hess.control$tol.evalues)
             se <- sqrt(diag(cov))
@@ -990,7 +1004,7 @@ flexsurvreg <- function(formula, anc=NULL, data, weights, bhazard, rtrunc, subse
         }
         else {
             if (hessian) 
-                warning("Optimisation has probably not converged to the maximum likelihood - Hessian is not positive definite. ")
+                warning("Optimisation has probably not converged to the maximum likelihood - Hessian is not finite. ")
             cov <- lcl <- ucl <- se <- NA
         }
         res <- cbind(est=inits, lcl=NA, ucl=NA, se=NA)
@@ -1028,7 +1042,8 @@ flexsurvreg <- function(formula, anc=NULL, data, weights, bhazard, rtrunc, subse
                   N=nrow(dat$Y), events=sum(dat$Y[,"status"]==1), trisk=sum(dat$Y[,"time"]),
                   concat.formula=f2, all.formulae=forms, dfns=dfns),
              ret,
-             list(covdata = covdata)) # temporary position so cyclomort doesn't break
+             list(all.contrasts=contr.save,
+                  covdata = covdata)) # temporary position so cyclomort doesn't break
     ret$BIC <- BIC.flexsurvreg(ret, cens=TRUE)
     ret <- c(ret, check_deriv(optpars=optpars, Y=Y, X=X, weights=weights, bhazard=bhazard, rtrunc=rtrunc, dlist=dlist, inits=inits, dfns=dfns, aux=aux, mx=mx, fixedpars=fixedpars))
     class(ret) <- "flexsurvreg"
@@ -1039,7 +1054,7 @@ check_deriv <- function(optpars, Y, X, weights, bhazard, rtrunc, dlist, inits, d
   if (isTRUE(getOption("flexsurv.test.analytic.derivatives")) && deriv_supported(Y)){
     if (is.logical(fixedpars) && fixedpars==TRUE) { optpars <- inits; fixedpars=FALSE }
     if (dfns$deriv)
-      deriv.test <- deriv.test(optpars=optpars, Y=Y, X=X, weights=weights, bhazard=bhazard, rtrunc=rtrunc, dlist=dlist, inits=inits, dfns=dfns, aux=aux, mx=mx, fixedpars=fixedpars)
+      deriv.test <- deriv_test(optpars=optpars, Y=Y, X=X, weights=weights, bhazard=bhazard, rtrunc=rtrunc, dlist=dlist, inits=inits, dfns=dfns, aux=aux, mx=mx, fixedpars=fixedpars)
     if (dfns$hessian)
       hess.test <- hess.test(optpars=optpars, Y=Y, X=X, weights=weights, bhazard=bhazard, rtrunc=rtrunc, dlist=dlist, inits=inits, dfns=dfns, aux=aux, mx=mx, fixedpars=fixedpars)
     res <- list(deriv.test=deriv.test, hess.test=hess.test)
@@ -1105,7 +1120,7 @@ form.model.matrix <- function(object, newdata, na.action=na.pass, forms=NULL){
     names(mml) <- names(forms)
     forms[[1]] <- delete.response(terms(forms[[1]]))
     for (i in seq_along(forms)){
-        mml[[i]] <- model.matrix(forms[[i]], mf)
+        mml[[i]] <- model.matrix(forms[[i]], mf, contrasts.arg = object$all.contrasts[[i]])
     }
     X <- compress.model.matrices(mml)
 
@@ -1389,4 +1404,23 @@ deriv_supported <- function(Y){
   event <- Y[,"status"] == 1
   left_cens <- is.finite(Y[!event, "time2"])
   !any(left_cens)
+}
+
+
+droplevels_factor_keepcontrasts <- function (x, exclude = if (anyNA(levels(x))) NULL else NA, ...) {
+  ct <- attr(x, "contrasts")
+  x <- factor(x, exclude = exclude)
+  contrasts(x) <- ct
+  x
+}
+
+droplevels_keepcontrasts <- function (x, except = NULL, exclude, ...) 
+{
+    ix <- vapply(x, is.factor, NA)
+    if (!is.null(except)) 
+        ix[except] <- FALSE
+    x[ix] <- if (missing(exclude)) 
+        lapply(x[ix], droplevels_factor_keepcontrasts)
+    else lapply(x[ix], droplevels_factor_keepcontrasts, exclude = exclude)
+    x
 }

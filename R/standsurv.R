@@ -446,6 +446,7 @@ standsurv <- function(object, newdata = NULL, at = list(list()), atreference = 1
 #' @importFrom dplyr left_join
 #' @importFrom dplyr slice
 #' @importFrom dplyr n
+#' @importFrom dplyr ungroup
 #' @importFrom statmod gauss.quad
 #' @import rlang
 standsurv.fn <- function(object, type, newdata, t, i, trans="none", weighted, expsurv, rmap, ratetable, 
@@ -475,12 +476,15 @@ standsurv.fn <- function(object, type, newdata, t, i, trans="none", weighted, ex
 # generic standardisation function, for use with types "survival", "relsurv", "excesshazard"
 standsurv.fn.generic <- function(t, object, type, newdata, i, weighted, tr.fun){
   pred <- summary(object, type = type, tidy = T, newdata=newdata, t=t, ci=F)
+  pred$levels.fct <- factor(seq_along(t))
   if(weighted){
     pred$weights <- rep(newdata$`(weights)`, each=length(t))
-    predsum <- pred %>% group_by(time) %>% 
-      summarise("at{i}" := tr.fun(weighted.mean(.data$est, .data$weights)))
+    predsum <- pred %>% group_by(levels.fct, time) %>%
+      summarise("at{i}" := tr.fun(weighted.mean(.data$est, .data$weights))) %>%
+      ungroup() %>% select(-levels.fct)
   } else{
-    predsum <- pred %>% group_by(time) %>% summarise("at{i}" := tr.fun(mean(.data$est)))
+    predsum <- pred %>% group_by(levels.fct, time) %>% summarise("at{i}" := tr.fun(mean(.data$est))) %>%
+      ungroup() %>% select(-levels.fct)
   }
   predsum
 }
@@ -490,13 +494,16 @@ standsurv.fn.hazard <- function(t, object, newdata, i, weighted, tr.fun){
   pred <- summary(object, type = "hazard", tidy = T, newdata=newdata, t=t, ci=F)
   names(pred)[names(pred)=="est"] <- "h"
   pred <- cbind(pred, S = summary(object, type = "survival", tidy = T, newdata=newdata, t=t, ci=F)[,"est"])
+  pred$levels.fct <- factor(seq_along(t))
   
   if(weighted){
     pred$weights <- rep(newdata$`(weights)`, each=length(t))
-    predsum <- pred %>% group_by(time) %>% 
-      summarise("at{i}" := tr.fun(weighted.mean(.data$h,.data$S * .data$weights)))
+    predsum <- pred %>% group_by(levels.fct, time) %>% 
+      summarise("at{i}" := tr.fun(weighted.mean(.data$h,.data$S * .data$weights))) %>%
+      ungroup() %>% select(-levels.fct)
   } else{
-    predsum <- pred %>% group_by(time) %>% summarise("at{i}" := tr.fun(weighted.mean(.data$h,.data$S)))
+    predsum <- pred %>% group_by(levels.fct, time) %>% summarise("at{i}" := tr.fun(weighted.mean(.data$h,.data$S))) %>% 
+      ungroup() %>% select(-levels.fct)
   }
 }
 
@@ -521,12 +528,15 @@ standsurv.fn.acsurvival <- function(t, object, newdata, i, weighted, tr.fun, exp
   rs$id <- rep(1:dim(newdata)[1],each=length(t))
   names(rs)[names(rs)=="est"] <- "rs"
   pred <- rs %>% left_join(expsurv$expsurv, by=c("id","time"))
+  pred$levels.fct <- factor(seq_along(t))
   if(weighted){
     pred$weights <- rep(newdata$`(weights)`, each=length(t))
-    predsum <- pred %>% group_by(time) %>%
-      summarise("at{i}" := tr.fun(weighted.mean(.data$rs*.data$es, .data$weights)))
+    predsum <- pred %>% group_by(levels.fct, time) %>%
+      summarise("at{i}" := tr.fun(weighted.mean(.data$rs*.data$es, .data$weights))) %>%
+      ungroup() %>% select(-levels.fct)
   } else {
-    predsum <- pred %>% group_by(time) %>% summarise("at{i}" := tr.fun(mean(.data$rs*.data$es)))
+    predsum <- pred %>% group_by(levels.fct, time) %>% summarise("at{i}" := tr.fun(mean(.data$rs*.data$es))) %>%
+      ungroup() %>% select(-levels.fct)
   }
   predsum
 }
@@ -541,13 +551,16 @@ standsurv.fn.achazard <- function(t, object, newdata, i, weighted, tr.fun, expsu
   names(excessh)[names(excessh)=="est"] <- "excessh"
   pred <- rs %>% left_join(excessh, by=c("id", "time")) %>%
     left_join(expsurv$expsurv, by=c("id","time"))
+  pred$levels.fct <- factor(seq_along(t))
   if(weighted){
     pred$weights <- rep(newdata$`(weights)`, each=length(t))
-    predsum <- pred %>% group_by(time) %>% 
-      summarise("at{i}" := tr.fun(weighted.mean(.data$excessh*.data$eh, .data$rs*.data$es * .data$weights)))
+    predsum <- pred %>% group_by(levels.fct, time) %>% 
+      summarise("at{i}" := tr.fun(weighted.mean(.data$excessh*.data$eh, .data$rs*.data$es * .data$weights))) %>%
+      ungroup() %>% select(-levels.fct)
   } else {
-    predsum <- pred %>% group_by(time) %>% 
-      summarise("at{i}" := tr.fun(weighted.mean(.data$excessh + .data$eh, .data$rs*.data$es)))
+    predsum <- pred %>% group_by(levels.fct, time) %>% 
+      summarise("at{i}" := tr.fun(weighted.mean(.data$excessh + .data$eh, .data$rs*.data$es))) %>%
+      ungroup() %>% select(-levels.fct)
   }
 }
 
@@ -582,11 +595,15 @@ acsurv.int.fn <- function(t1, object, newdata, rmap, ratetable, scale.ratetable,
                                    rmap = rmap, method="individual.s", 
                                    ratetable = ratetable, data=rs
   ))
+  rs$levels.fct <- factor(seq_along(t))
+  
   if(weighted){
-    rssum <- rs %>% group_by(time) %>% 
-      summarise(acsurv = weighted.mean(.data$est*.data$es, .data$weights))
+    rssum <- rs %>% group_by(levels.fct, time) %>% 
+      summarise(acsurv = weighted.mean(.data$est*.data$es, .data$weights)) %>%
+      ungroup() %>% select(-levels.fct)
   } else {
-    rssum <- rs %>% group_by(time) %>% summarise(acsurv = mean(.data$est*.data$es))
+    rssum <- rs %>% group_by(levels.fct, time) %>% summarise(acsurv = mean(.data$est*.data$es)) %>%
+      ungroup() %>% select(-levels.fct)
   }
   rssum$acsurv
 }
@@ -637,9 +654,9 @@ boot.standsurv <- function(object, B, dat, i, t, type, type2, weighted, se, ci, 
   X <- form.model.matrix(object, as.data.frame(dat), na.action=na.pass)
   if(!(type2 %in% c("acrmst","quantile","acquantile"))){
     if(!(type2 %in% c("acsurvival", "achazard"))){
-      sim.pred <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary.fns(object, type2), B=B, rawsim=rawsim) # pts, sims, times
+      sim.pred <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary_fns(object, type2), B=B, rawsim=rawsim) # pts, sims, times
     } else {
-      sim.pred <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary.fns(object, type), B=B, rawsim=rawsim) # pts, sims, times
+      sim.pred <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary_fns(object, type), B=B, rawsim=rawsim) # pts, sims, times
     }
     
     if(weighted){
@@ -650,7 +667,7 @@ boot.standsurv <- function(object, B, dat, i, t, type, type2, weighted, se, ci, 
     if(type2=="hazard"){
       # Weight individual hazards by survival function to get hazard of the standardized survival
       haz <- sim.pred
-      surv <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary.fns(object, "survival"), B=B, rawsim=rawsim) # pts, sims, times
+      surv <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary_fns(object, "survival"), B=B, rawsim=rawsim) # pts, sims, times
       stand.pred <- apply(haz*surv*weights, c(2,3),sum) / apply(surv*weights,c(2,3),sum)
     } else if(type2=="acsurvival"){
       rs <- sim.pred
@@ -659,7 +676,7 @@ boot.standsurv <- function(object, B, dat, i, t, type, type2, weighted, se, ci, 
       stand.pred <- apply(es*rs*weights, c(2,3),sum) / apply(weights,c(2,3),sum)
     } else if(type2=="achazard"){
       excessh <- sim.pred
-      rs <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary.fns(object, "survival"), B=B, rawsim=rawsim) # pts, sims, times
+      rs <- normbootfn.flexsurvreg(object, t=t, start=0, X=X, fn=summary_fns(object, "survival"), B=B, rawsim=rawsim) # pts, sims, times
       es <- array(expsurv$expsurv$es, dim= dim(rs)[c(1,3,2)])
       es <- aperm(es, c(1, 3, 2))
       eh <- array(expsurv$expsurv$eh, dim= dim(rs)[c(1,3,2)])
@@ -925,13 +942,15 @@ tidy.standsurv <- function(x, ...){
       pivot_longer(cols=matches("at[0-9]+_lci"),
                    names_to = "at",
                    names_pattern = "at(.+)_lci",
-                   values_to = paste0(type,"_lci"))
+                   values_to = paste0(type,"_lci")) %>%
+      distinct()
     standpred_at_uci <- standpred %>% 
       select(c(all_of(by), matches("at[0-9]+_uci"))) %>%
       pivot_longer(cols=matches("at[0-9]+_uci"),
                    names_to = "at",
                    names_pattern = "at(.+)_uci",
-                   values_to = paste0(type,"_uci"))
+                   values_to = paste0(type,"_uci")) %>%
+      distinct()
     standpred_at <- standpred_at %>% inner_join(standpred_at_lci, by=c(by,"at")) %>%
       inner_join(standpred_at_uci, by=c(by, "at"))
   }
@@ -956,13 +975,15 @@ tidy.standsurv <- function(x, ...){
         pivot_longer(cols=matches("contrast[0-9]+_[0-9]+_lci"),
                      names_to = "contrast",
                      names_pattern = "contrast(.+)_lci",
-                     values_to = paste0(contrast,"_lci"))
+                     values_to = paste0(contrast,"_lci")) %>%
+        distinct()
       standpred_contrast_uci <- standpred %>% 
         select(c(all_of(by), matches("contrast[0-9]+_[0-9]+_uci"))) %>%
         pivot_longer(cols=matches("contrast[0-9]+_[0-9]+_uci"),
                      names_to = "contrast",
                      names_pattern = "contrast(.+)_uci",
-                     values_to = paste0(contrast,"_uci"))
+                     values_to = paste0(contrast,"_uci")) %>%
+        distinct()
       standpred_contrast <- standpred_contrast %>% inner_join(standpred_contrast_lci, by=c(by, "contrast")) %>%
         inner_join(standpred_contrast_uci, by=c(by, "contrast"))
     }
@@ -1111,4 +1132,5 @@ expsurv.fn <- function(t, rmap, ratetable, data, weighted, scale.ratetable){
   return(list(marginal=marginal, expsurv=expsurv))
 }
 
-
+## to remove R CMD check NOTE
+utils::globalVariables(c("levels.fct"))

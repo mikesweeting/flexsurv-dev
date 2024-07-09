@@ -108,7 +108,7 @@ D2LSgompertz <- function(t, shape, rate){
 }
 
 D2Ldsurvspline <- function(t, gamma, beta=0, X=0, knots=c(-10,10), scale="hazard", timescale="log", spline="rp"){
-    d <- dbase.survspline(q=t, gamma=gamma, knots=knots, scale=scale, deriv=TRUE, spline=spline)
+    d <- dbase.survspline(q=t, gamma=gamma, knots=knots, scale=scale, deriv=2, spline=spline)
     for (i in seq_along(d)) assign(names(d)[i], d[[i]]); t <- q
     b <- basis(knots, tsfn(t,timescale), spline=spline)
     db <- dbasis(knots, tsfn(t,timescale), spline=spline)
@@ -119,28 +119,25 @@ D2Ldsurvspline <- function(t, gamma, beta=0, X=0, knots=c(-10,10), scale="hazard
       db <- dbasis(knots, tsfn(t,timescale), spline=spline)
     }
     npars <- ncol(gamma)
-    parnames <- paste0("gamma",seq_len(npars)-1)
-    res <- array(dim=c(length(t), npars, npars),
-                 dimnames = list(NULL, parnames, parnames))
     for (i in 1:npars){
       for (j in 1:npars){
         if (scale=="hazard") 
-          res[ind,i,j] <- -db[,i]*db[,j] / ds^2 - b[,i]*b[,j] * exp(eta)
+          ret[ind,i,j] <- -db[,i]*db[,j] / ds^2 - b[,i]*b[,j] * exp(eta)
         else if (scale=="odds") 
-          res[ind,i,j] <- -db[,i]*db[,j] / ds^2 - b[,i]*b[,j] * eeta
+          ret[ind,i,j] <- -db[,i]*db[,j] / ds^2 - b[,i]*b[,j] * eeta
       }
     }
-    res
+    ret
 }
 
 D2LSsurvspline <- function(t, gamma, beta=0, X=0, knots=c(-10,10), scale="hazard", timescale="log", spline="rp"){
-    d <- dbase.survspline(q=t, gamma=gamma, knots=knots, scale=scale, deriv=TRUE, spline=spline)
+    tmp_gamma <- gamma
+    tmp_t <- t
+    tmp_knots <- knots
+    d <- dbase.survspline(q=t, gamma=gamma, knots=knots, scale=scale, deriv=2, spline=spline)
     for (i in seq_along(d)) assign(names(d)[i], d[[i]]); t <- q
     b <- basis(knots, tsfn(t,timescale), spline=spline)
     npars <- ncol(gamma)
-    parnames <- paste0("gamma",seq_len(npars)-1)
-    res <- array(dim=c(length(t), npars, npars),
-                 dimnames = list(NULL, parnames, parnames))
     if (length(t) > 0){
       eta <- rowSums(b * gamma) + as.numeric(X %*% beta)
       if (scale=="odds") {
@@ -149,13 +146,13 @@ D2LSsurvspline <- function(t, gamma, beta=0, X=0, knots=c(-10,10), scale="hazard
       for (i in 1:npars){
         for (j in 1:npars){
           if (scale=="hazard") 
-            res[ind,i,j] <- ifelse(t==0, 0, - b[,i]*b[,j]*exp(eta))
+            ret[ind,i,j] <- ifelse(t==0, 0, - b[,i]*b[,j]*exp(eta))
           else if (scale=="odds") 
-            res[ind,i,j] <- ifelse(t==0, 0, - b[,i]*b[,j] * eeta)
+            ret[ind,i,j] <- ifelse(t==0, 0, - b[,i]*b[,j] * eeta)
         }
       }
     }
-    res
+    ret
 }
 
 d2deriv <- function(d2dfn, ddcall, X, mx, dlist){
@@ -270,20 +267,19 @@ D2minusloglik.flexsurv <- function(optpars, Y, X=0, weights, bhazard, rtrunc, dl
         dhazinv <- surv/dens*(d1LS - d1Ld)
         
         if (any(dead)){
-            ## given two matrices with dims (n,p), 
-            ## return array of dim(n,p,p) with outer product of each pair of matrix rows
-            vouter <- function(y,z){
-                rows <- seq_len(nrow(y))
-                res <- mapply(outer, split(y, rows), split(z, rows), SIMPLIFY=FALSE)
-                res <- simplify2array(res, except = NULL)
-                aperm(res, c(3,1,2))
-            }
-            
-            doff <- - offseti*bw*(offseti*vouter(dhazinv, dhazinv)*bw +
-                                      (d2Ld - d2LS)*surv/dens +
-                                      vouter(d1Ld - d1LS, dhazinv))
-            
-            res <- res - apply(doff*weights[dead],2:3,sum)
+          ## given two matrices with dims (n,p), 
+          ## return array of dim(n,p,p) with outer product of each pair of matrix rows
+          vouter <- function(y,z){
+            rows <- seq_len(nrow(y))
+            res <- mapply(outer, split(y, rows), split(z, rows), SIMPLIFY=FALSE)
+            res <- array(unlist(res), dim=c(dim(res[[1]]), length(res))) # res <- simplify2array(res, except = NULL)  # would do this, but needs R >= 4.2.0
+            aperm(res, c(3,1,2))
+          }          
+          doff <- - offseti*bw*(offseti*vouter(dhazinv, dhazinv)*bw +
+                                (d2Ld - d2LS)*surv/dens +
+                                vouter(d1Ld - d1LS, dhazinv))
+          
+          res <- res - apply(doff*weights[dead],2:3,sum)
         }
     }
     ## currently wastefully calculates derivs for fixed pars then discards them
