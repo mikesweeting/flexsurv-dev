@@ -13,7 +13,7 @@ functions in the mstate package."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">flexsurv</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -187,7 +187,7 @@ via <span class="pkg">mstate</span>.</p></div>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">bcox</span> <span class="op">&lt;-</span> <span class="fu">coxph</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/pkg/survival/man/Surv.html" class="external-link">Surv</a></span><span class="op">(</span><span class="va">years</span>, <span class="va">status</span><span class="op">)</span> <span class="op">~</span> <span class="fu"><a href="https://rdrr.io/pkg/survival/man/strata.html" class="external-link">strata</a></span><span class="op">(</span><span class="va">trans</span><span class="op">)</span>, data<span class="op">=</span><span class="va">bosms3</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="st"><a href="https://www.lumc.nl/org/bds/research/medische-statistiek/survival-analysis/" class="external-link">"mstate"</a></span><span class="op">)</span><span class="op">)</span><span class="op">{</span></span></span>
+<span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="st"><a href="https://github.com/hputter/mstate" class="external-link">"mstate"</a></span><span class="op">)</span><span class="op">)</span><span class="op">{</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">mcox</span> <span class="op">&lt;-</span> <span class="fu">mstate</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/mstate/man/msfit.html" class="external-link">msfit</a></span><span class="op">(</span><span class="va">bcox</span>, trans<span class="op">=</span><span class="va">tmat</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
