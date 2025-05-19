@@ -25,3 +25,8 @@ inst/doc
 *.gcda
 *.gcno
 *.gcov
+#Ignore Persisted R files created through user installation
+.R/
+.cache/
+renv/
+.gitignore
